@@ -492,18 +492,26 @@ nfsd_uuid_parse(char **mesg, char *buf, unsigned char **puuid)
 {
 	int len;
 
+	printk("parsing uuid!\n");
+
 	/* more than one uuid */
-	if (*puuid)
+	if (*puuid) {
+		printk("more than one uuid!\n");
 		return -EINVAL;
+	}
 
 	/* expect a 16 byte uuid encoded as \xXXXX... */
 	len = qword_get(mesg, buf, PAGE_SIZE);
-	if (len != EX_UUID_LEN)
+	if (len != EX_UUID_LEN) {
+		printk("invalid uuid len %d\n", len);
 		return -EINVAL;
+	}
 
 	*puuid = kmemdup(buf, EX_UUID_LEN, GFP_KERNEL);
 	if (*puuid == NULL)
 		return -ENOMEM;
+
+	printk("uuid parsed!");
 
 	return 0;
 }
@@ -517,6 +525,8 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 	struct auth_domain *dom = NULL;
 	struct svc_export exp = {}, *expp;
 	int an_int;
+
+	printk("okay parsing export man\n");
 
 	if (mesg[mlen-1] != '\n')
 		return -EINVAL;
@@ -539,12 +549,16 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 
 	/* path */
 	err = -EINVAL;
-	if ((len = qword_get(&mesg, buf, PAGE_SIZE)) <= 0)
+	if ((len = qword_get(&mesg, buf, PAGE_SIZE)) <= 0) {
+		printk("bad path man\n");
 		goto out1;
+	}
 
 	err = kern_path(buf, 0, &exp.ex_path);
-	if (err)
+	if (err) {
+		printk("bad kern_path man\n");
 		goto out1;
+	}
 
 	exp.ex_client = dom;
 	exp.cd = cd;
@@ -565,38 +579,49 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 		if (err || an_int < 0)
 			goto out3;
 		exp.ex_flags= an_int;
+		printk("got flags=%d\n", an_int);
 	
 		/* anon uid */
 		err = get_int(&mesg, &an_int);
 		if (err)
 			goto out3;
 		exp.ex_anon_uid= make_kuid(current_user_ns(), an_int);
+		printk("got anon_uid=%d\n", an_int);
 
 		/* anon gid */
 		err = get_int(&mesg, &an_int);
 		if (err)
 			goto out3;
 		exp.ex_anon_gid= make_kgid(current_user_ns(), an_int);
+		printk("got anon_gid=%d\n", an_int);
 
 		/* fsid */
 		err = get_int(&mesg, &an_int);
 		if (err)
 			goto out3;
 		exp.ex_fsid = an_int;
+		printk("got fsid=%d\n", an_int);
+
+		printk("export.c: yeah checking for optional params\n");
 
 		while ((len = qword_get(&mesg, buf, PAGE_SIZE)) > 0) {
+			printk("got word: '%s'\n", buf);
 			if (strcmp(buf, "fsloc") == 0)
 				err = fsloc_parse(&mesg, buf, &exp.ex_fslocs);
-			else if (strcmp(buf, "uuid") == 0)
+			else if (strcmp(buf, "uuid") == 0) {
 				err = nfsd_uuid_parse(&mesg, buf, &exp.ex_uuid);
-			else if (strcmp(buf, "secinfo") == 0)
+				printk("yo got uuid! %d\n", err);
+			} else if (strcmp(buf, "secinfo") == 0)
 				err = secinfo_parse(&mesg, buf, &exp);
-			else
+			else {
 				/* quietly ignore unknown words and anything
 				 * following. Newer user-space can try to set
 				 * new values, then see what the result was.
 				 */
-				break;
+				printk("ignoring unknown word '%s'\n", buf);
+				//break;
+				continue;
+			}
 			if (err)
 				goto out4;
 		}
